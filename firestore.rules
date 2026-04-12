@@ -1,0 +1,92 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuth()    { return request.auth != null; }
+    function isOwner(uid){ return request.auth.uid == uid; }
+    function isUniEmail(){
+      return request.auth.token.email.matches('.*@uttarauniversity\\.edu\\.bd$')
+          || request.auth.token.email.matches('.*@uttara\\.ac\\.bd$')
+          || request.auth.token.email.matches('.*@gmail\\.com$');
+    }
+    function isAuthority(){
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'authority';
+    }
+
+    // Users
+    match /users/{uid} {
+      allow read:   if isAuth() && isUniEmail();
+      allow create: if isOwner(uid) && isUniEmail();
+      allow update: if isOwner(uid);
+    }
+
+    // Posts
+    match /posts/{postId} {
+      allow read:   if isAuth() && isUniEmail();
+      allow create: if isAuth() && isUniEmail();
+      allow update: if isAuth() && isUniEmail();
+      allow delete: if isAuth() && (isOwner(resource.data.authorUid) || isAuthority());
+
+      match /comments/{commentId} {
+        allow read:   if isAuth() && isUniEmail();
+        allow create: if isAuth() && isUniEmail();
+        allow delete: if isAuth() && isOwner(resource.data.authorUid);
+      }
+    }
+
+    // Conversations — strict: only members
+    match /conversations/{convId} {
+      allow read:   if isAuth() && isUniEmail() && request.auth.uid in resource.data.members;
+      allow create: if isAuth() && isUniEmail();
+      allow update: if isAuth() && isUniEmail() && request.auth.uid in resource.data.members;
+
+      match /messages/{msgId} {
+        allow read:   if isAuth() && isUniEmail()
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.members;
+        allow create: if isAuth() && isUniEmail()
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.members;
+      }
+    }
+
+    // Events
+    match /events/{eventId} {
+      allow read:   if isAuth() && isUniEmail();
+      allow create: if isAuth() && isUniEmail();
+      allow update: if isAuth() && isUniEmail();
+      allow delete: if isAuth() && (isOwner(resource.data.organizerUid) || isAuthority());
+    }
+
+    // Notices — authority only for create
+    match /notices/{noticeId} {
+      allow read:   if isAuth() && isUniEmail();
+      allow create: if isAuth() && isUniEmail() && isAuthority();
+      allow update: if isAuth() && isOwner(resource.data.authorUid);
+      allow delete: if isAuth() && (isOwner(resource.data.authorUid) || isAuthority());
+    }
+
+    // Marketplace
+    match /marketplace/{listingId} {
+      allow read:   if isAuth() && isUniEmail();
+      allow create: if isAuth() && isUniEmail();
+      allow update: if isAuth() && isOwner(resource.data.sellerUid);
+      allow delete: if isAuth() && (isOwner(resource.data.sellerUid) || isAuthority());
+    }
+
+    // Notifications — recipient only
+    match /notifications/{notifId} {
+      allow read:   if isAuth() && isOwner(resource.data.toUid);
+      allow create: if isAuth() && isUniEmail();
+      allow update: if isAuth() && isOwner(resource.data.toUid);
+    }
+
+    // Friend Requests
+    match /friendRequests/{reqId} {
+      allow read:   if isAuth() && isUniEmail()
+        && (isOwner(resource.data.fromUid) || isOwner(resource.data.toUid));
+      allow create: if isAuth() && isUniEmail() && isOwner(request.resource.data.fromUid);
+      allow update: if isAuth() && isOwner(resource.data.toUid);
+      allow delete: if isAuth()
+        && (isOwner(resource.data.fromUid) || isOwner(resource.data.toUid));
+    }
+  }
+}

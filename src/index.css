@@ -1,0 +1,106 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg: #f0f2ff;
+  --color-surface: #ffffff;
+  --color-primary: #4b52e8;
+  --color-primary-light: #e0eaff;
+  --color-accent: #f97316;
+  --color-text: #1a1d3a;
+  --color-muted: #6b7280;
+  --color-border: #e4e8f5;
+  --radius: 14px;
+  --shadow: 0 2px 16px rgba(75, 82, 232, 0.08);
+  --shadow-md: 0 4px 24px rgba(75, 82, 232, 0.12);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'Sora', sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 600;
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white font-semibold py-2.5 px-5 rounded-xl transition-all duration-200 flex items-center gap-2 justify-center text-sm;
+    box-shadow: 0 4px 12px rgba(75, 82, 232, 0.3);
+  }
+  .btn-primary:active { transform: scale(0.98); }
+
+  .btn-ghost {
+    @apply bg-transparent hover:bg-primary-50 text-primary-600 font-semibold py-2.5 px-5 rounded-xl transition-all duration-200 flex items-center gap-2 justify-center text-sm border border-primary-200;
+  }
+
+  .btn-danger {
+    @apply bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-xl transition-all duration-200 text-sm;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl border border-surface-200 p-4;
+    box-shadow: var(--shadow);
+  }
+
+  .input {
+    @apply w-full border border-surface-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-transparent bg-surface-50 transition-all;
+  }
+  .input:focus { background: white; }
+
+  .label {
+    @apply text-xs font-semibold text-surface-800 uppercase tracking-wide mb-1 block;
+  }
+
+  .badge-authority {
+    @apply inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+
+  .badge-club {
+    @apply inline-flex items-center gap-1 bg-primary-50 text-primary-700 border border-primary-200 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+
+  .badge-dept {
+    @apply inline-flex items-center bg-surface-100 text-surface-800 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .nav-link {
+    @apply flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:bg-primary-50 hover:text-primary-700 transition-all cursor-pointer;
+  }
+
+  .nav-link.active {
+    @apply bg-primary-600 text-white hover:bg-primary-700;
+    box-shadow: 0 4px 12px rgba(75, 82, 232, 0.3);
+  }
+
+  .page-header {
+    @apply font-display text-xl font-bold text-surface-900 mb-4;
+  }
+
+  .divider {
+    @apply border-t border-surface-200 my-3;
+  }
+
+  .avatar {
+    @apply rounded-full object-cover bg-primary-100 flex items-center justify-center text-primary-600 font-bold;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c7d7fd; border-radius: 99px; }
+
+/* Mobile bottom nav safe area */
+.bottom-nav {
+  padding-bottom: env(safe-area-inset-bottom);
+}
