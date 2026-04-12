@@ -88,5 +88,11 @@ service cloud.firestore {
       allow delete: if isAuth()
         && (isOwner(resource.data.fromUid) || isOwner(resource.data.toUid));
     }
+
+    // Presence — separate from users so heartbeat writes never trigger users snapshot
+    match /presence/{uid} {
+      allow read:   if isAuth() && isUniEmail();
+      allow write:  if isAuth() && isOwner(uid);
+    }
   }
 }
