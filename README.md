@@ -145,14 +145,7 @@ This installs the new `@emailjs/browser` package along with everything else.
 npm run dev
 ```
 
-Open **http://localhost:5173** and test:
-- [ ] Student signup → OTP email arrives → verify → can log in
-- [ ] Authority signup → OTP email arrives → verify → can log in
-- [ ] Gmail signup works (up to 5 accounts for testing)
-- [ ] Forgot password → OTP → reset email sent
-- [ ] Club role conflict: sign up two accounts with same club + role → second one rejected
-- [ ] Post with image (via Cloudinary)
-- [ ] Real-time feed updates
+Open **http://localhost:5173** and test.
 
 ---
 
@@ -212,7 +205,7 @@ firebase deploy --only hosting
 - [ ] Create text post
 - [ ] Create post with image (Cloudinary upload)
 - [ ] Create poll → vote → percentages update live
-- [ ] React with 5 emotion types (hover to see picker)
+- [ ] React with 5 emotion types (click to see picker)
 - [ ] Click reaction count → see who reacted (modal)
 - [ ] Edit own post → "(edited)" label shows
 - [ ] Delete own post
@@ -225,6 +218,7 @@ firebase deploy --only hosting
 - [ ] Real-time message delivery
 - [ ] Send image in chat
 - [ ] Send emoji in chat
+- [ ] Reply any message
 - [ ] Create group chat (up to 50 members)
 - [ ] Add member to existing group
 - [ ] Upload group photo
