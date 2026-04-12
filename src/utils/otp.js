@@ -1,9 +1,9 @@
 // src/utils/otp.js — OTP generation and sending via EmailJS
 import emailjs from '@emailjs/browser';
 
-const SERVICE_ID  = import.meta.env.VITE_EMAILJS_SERVICE_ID  || 'service_uniconnect';
-const TEMPLATE_ID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID || 'template_e80f8or';
-const PUBLIC_KEY  = import.meta.env.VITE_EMAILJS_PUBLIC_KEY  || 'sqtwpuaDG-_Y6GtrP';
+const SERVICE_ID  = import.meta.env.VITE_EMAILJS_SERVICE_ID  || 'service_your_id';
+const TEMPLATE_ID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID || 'template_your_id';
+const PUBLIC_KEY  = import.meta.env.VITE_EMAILJS_PUBLIC_KEY  || 'your_key';
 
 /** Generate a 6-digit OTP and store it in sessionStorage with a 10-min expiry */
 export const generateOTP = () => {
