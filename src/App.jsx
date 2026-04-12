@@ -2,6 +2,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { UsersProvider } from './contexts/UsersContext';
+import { PresenceProvider } from './contexts/PresenceContext';
 import AuthPage from './pages/AuthPage';
 import DashboardLayout from './components/layout/DashboardLayout';
 import FeedPage from './pages/FeedPage';
@@ -26,6 +28,7 @@ const ProtectedRoute = ({ children }) => {
   );
   return currentUser ? children : <Navigate to="/auth" replace />;
 };
+
 const PublicRoute = ({ children }) => {
   const { currentUser, loading } = useAuth();
   if (loading) return null;
@@ -35,27 +38,34 @@ const PublicRoute = ({ children }) => {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Toaster position="top-center" toastOptions={{
-          style:{ fontFamily:'Sora,sans-serif', fontSize:'13px', borderRadius:'12px', boxShadow:'0 4px 20px rgba(0,0,0,0.1)'},
-          success:{ iconTheme:{ primary:'#4b52e8', secondary:'white'}}
-        }}/>
-        <Routes>
-          <Route path="/auth" element={<PublicRoute><AuthPage/></PublicRoute>}/>
-          <Route path="/" element={<ProtectedRoute><DashboardLayout/></ProtectedRoute>}>
-            <Route index element={<FeedPage/>}/>
-            <Route path="messages" element={<MessagesPage/>}/>
-            <Route path="messages/:conversationId" element={<MessagesPage/>}/>
-            <Route path="events" element={<EventsPage/>}/>
-            <Route path="clubs" element={<ClubsPage/>}/>
-            <Route path="marketplace" element={<MarketplacePage/>}/>
-            <Route path="notices" element={<NoticeBoardPage/>}/>
-            <Route path="profile/:uid" element={<ProfilePage/>}/>
-            <Route path="notifications" element={<NotificationsPage/>}/>
-            <Route path="friends" element={<FriendsPage/>}/>
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      {/* UsersProvider: one subscription to profile data (name, photo, etc.)
+          PresenceProvider: one subscription to online/offline status
+          They are separate so heartbeat writes never trigger UsersProvider */}
+      <UsersProvider>
+        <PresenceProvider>
+          <BrowserRouter>
+            <Toaster position="top-center" toastOptions={{
+              style: { fontFamily: 'Sora,sans-serif', fontSize: '13px', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' },
+              success: { iconTheme: { primary: '#4b52e8', secondary: 'white' } }
+            }} />
+            <Routes>
+              <Route path="/auth" element={<PublicRoute><AuthPage /></PublicRoute>} />
+              <Route path="/" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+                <Route index element={<FeedPage />} />
+                <Route path="messages" element={<MessagesPage />} />
+                <Route path="messages/:conversationId" element={<MessagesPage />} />
+                <Route path="events" element={<EventsPage />} />
+                <Route path="clubs" element={<ClubsPage />} />
+                <Route path="marketplace" element={<MarketplacePage />} />
+                <Route path="notices" element={<NoticeBoardPage />} />
+                <Route path="profile/:uid" element={<ProfilePage />} />
+                <Route path="notifications" element={<NotificationsPage />} />
+                <Route path="friends" element={<FriendsPage />} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </PresenceProvider>
+      </UsersProvider>
     </AuthProvider>
   );
 }
