@@ -5,9 +5,6 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  updatePassword,
-  reauthenticateWithCredential,
-  EmailAuthProvider,
 } from 'firebase/auth';
 import {
   doc, setDoc, getDoc, serverTimestamp,
@@ -25,45 +22,97 @@ export const useAuth = () => {
 const ALLOWED_DOMAINS = ['uttarauniversity.edu.bd', 'uttara.ac.bd'];
 const GMAIL_LIMIT = 5;
 
-export const validateUniversityEmail = (email) => {
-  const domain = email.split('@')[1]?.toLowerCase();
-  return ALLOWED_DOMAINS.includes(domain) || domain === 'gmail.com';
-};
-
-const isGmail = (email) => email.split('@')[1]?.toLowerCase() === 'gmail.com';
-
-/** Check how many Gmail accounts exist already */
 const getGmailCount = async () => {
-  const snap = await getDocs(query(collection(db, 'users'), where('emailDomain', '==', 'gmail.com')));
-  return snap.size;
+  try {
+    const snap = await getDocs(query(collection(db, 'users'), where('emailDomain', '==', 'gmail.com')));
+    return snap.size;
+  } catch (_) { return 0; }
 };
 
-/** Check if a club role is already taken */
 export const checkClubRoleTaken = async (clubAffiliation, clubPosition) => {
   if (!clubAffiliation || !clubPosition || clubPosition === 'Member') return false;
-  const q = query(
+  const snap = await getDocs(query(
     collection(db, 'users'),
     where('clubAffiliation', '==', clubAffiliation),
     where('clubPosition',    '==', clubPosition)
-  );
-  const snap = await getDocs(q);
+  ));
   return !snap.empty;
 };
 
-/** Update user active status in Firestore */
-export const updateActiveStatus = async (uid, isActive) => {
+// ── Presence: writes to a SEPARATE 'presence' collection ──────
+// This means heartbeat writes NEVER touch 'users' collection,
+// so they NEVER trigger the UsersContext snapshot → zero wasted reads.
+export const updatePresence = async (uid, isActive) => {
   try {
-    await updateDoc(doc(db, 'users', uid), {
+    await setDoc(doc(db, 'presence', uid), {
       isActive,
       lastActive: serverTimestamp(),
-    });
+      uid,
+    }, { merge: true });
   } catch (_) {}
 };
 
+/**
+ * Presence tracking — writes only to 'presence' collection, never 'users'.
+ * Heartbeat every 5 minutes.
+ * Inactivity timeout: 5 minutes.
+ */
+const startActivityTracking = (uid) => {
+  updatePresence(uid, true);
+
+  let inactivityTimer = null;
+  const INACTIVITY_MS = 5 * 60 * 1000;
+
+  const setOffline = () => {
+    clearTimeout(inactivityTimer);
+    updatePresence(uid, false);
+  };
+  const resetTimer = () => {
+    clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(setOffline, INACTIVITY_MS);
+  };
+
+  // Heartbeat every 5 minutes while tab is visible
+  const heartbeat = setInterval(() => {
+    if (!document.hidden) updatePresence(uid, true);
+  }, 5 * 60_000);
+
+  // Tab visibility
+  const handleVisibility = () => {
+    if (document.hidden) { clearTimeout(inactivityTimer); updatePresence(uid, false); }
+    else { updatePresence(uid, true); resetTimer(); }
+  };
+  document.addEventListener('visibilitychange', handleVisibility);
+
+  // User activity — throttled to one write per 60 seconds max
+  let lastWrite = 0;
+  const handleActivity = () => {
+    const now = Date.now();
+    if (now - lastWrite > 60_000) {
+      lastWrite = now;
+      if (!document.hidden) resetTimer();
+    }
+  };
+  const events = ['mousemove', 'keydown', 'touchstart', 'click'];
+  events.forEach(e => document.addEventListener(e, handleActivity, { passive: true }));
+
+  window.addEventListener('beforeunload', setOffline);
+  resetTimer();
+
+  return () => {
+    clearInterval(heartbeat);
+    clearTimeout(inactivityTimer);
+    document.removeEventListener('visibilitychange', handleVisibility);
+    events.forEach(e => document.removeEventListener(e, handleActivity));
+    window.removeEventListener('beforeunload', setOffline);
+    updatePresence(uid, false);
+  };
+};
+
 export const AuthProvider = ({ children }) => {
-  const [currentUser,  setCurrentUser]  = useState(null);
-  const [userProfile,  setUserProfile]  = useState(null);
-  const [loading,      setLoading]      = useState(true);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
+  const [loading,     setLoading]     = useState(true);
 
   const fetchUserProfile = async (uid) => {
     try {
@@ -77,21 +126,25 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    let stopTracking = null;
     const unsub = onAuthStateChanged(auth, async (user) => {
+      if (stopTracking) { stopTracking(); stopTracking = null; }
       setCurrentUser(user);
       if (user) {
-        await fetchUserProfile(user.uid);
-        await updateActiveStatus(user.uid, true);
-        // Mark offline on tab close
-        const handleBeforeUnload = () => updateActiveStatus(user.uid, false);
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+        try {
+          await fetchUserProfile(user.uid);
+          stopTracking = startActivityTracking(user.uid);
+        } catch (e) {
+          console.error('Auth init error:', e);
+        } finally {
+          setLoading(false);
+        }
       } else {
         setUserProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
-    return unsub;
+    return () => { unsub(); if (stopTracking) stopTracking(); };
   }, []);
 
   const buildBaseProfile = (uid, data) => ({
@@ -103,27 +156,27 @@ export const AuthProvider = ({ children }) => {
     bio:         '',
     job:         '',
     education:   '',
-    isActive:    false,
-    lastActive:  serverTimestamp(),
     friends:     [],
     createdAt:   serverTimestamp(),
   });
 
   const signupStudent = async (data) => {
     const domain = data.email.split('@')[1]?.toLowerCase();
-    const isUni = ALLOWED_DOMAINS.includes(domain);
-    const isGm  = domain === 'gmail.com';
-    if (!isUni && !isGm) throw new Error('Only university or @gmail.com emails allowed');
+    const isUni  = ALLOWED_DOMAINS.includes(domain);
+    const isGm   = domain === 'gmail.com';
+    if (!isUni && !isGm)
+      throw new Error('Only university emails or Gmail test accounts are allowed.');
     if (isGm) {
       const cnt = await getGmailCount();
-      if (cnt >= GMAIL_LIMIT) throw new Error(`Gmail signup limit reached (max ${GMAIL_LIMIT} test accounts). Use a university email.`);
+      if (cnt >= GMAIL_LIMIT)
+        throw new Error(`Gmail test account limit reached (${GMAIL_LIMIT} max). Use your university email.`);
     }
     if (data.clubAffiliation && data.clubPosition && data.clubPosition !== 'Member') {
       const taken = await checkClubRoleTaken(data.clubAffiliation, data.clubPosition);
-      if (taken) throw new Error(`The role "${data.clubPosition}" in "${data.clubAffiliation}" is already taken. Choose another role.`);
+      if (taken) throw new Error(`The role "${data.clubPosition}" in "${data.clubAffiliation}" is already taken.`);
     }
     const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
-    const profile = {
+    await setDoc(doc(db, 'users', cred.user.uid), {
       ...buildBaseProfile(cred.user.uid, data),
       universityId:    data.universityId,
       fullName:        data.fullName,
@@ -132,32 +185,30 @@ export const AuthProvider = ({ children }) => {
       clubAffiliation: data.clubAffiliation || '',
       clubPosition:    data.clubPosition    || '',
       role:            'student',
-    };
-    await setDoc(doc(db, 'users', cred.user.uid), profile);
+    });
     return cred;
   };
 
   const signupAuthority = async (data) => {
     const domain = data.email.split('@')[1]?.toLowerCase();
-    if (!ALLOWED_DOMAINS.includes(domain)) throw new Error('Only university email addresses are allowed');
+    if (!ALLOWED_DOMAINS.includes(domain))
+      throw new Error('Only university email addresses are allowed for authority accounts.');
     const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
-    const profile = {
+    await setDoc(doc(db, 'users', cred.user.uid), {
       ...buildBaseProfile(cred.user.uid, data),
       fullName:   data.fullName,
       address:    data.address,
       department: data.department,
       position:   data.position,
       role:       'authority',
-    };
-    await setDoc(doc(db, 'users', cred.user.uid), profile);
+    });
     return cred;
   };
 
   const login = async (emailOrId, password) => {
     let email = emailOrId;
     if (!emailOrId.includes('@')) {
-      const q = query(collection(db, 'users'), where('universityId', '==', emailOrId));
-      const snap = await getDocs(q);
+      const snap = await getDocs(query(collection(db, 'users'), where('universityId', '==', emailOrId)));
       if (snap.empty) throw new Error('University ID not found');
       email = snap.docs[0].data().email;
     }
@@ -166,20 +217,8 @@ export const AuthProvider = ({ children }) => {
     return cred;
   };
 
-  /** Reset password after OTP verification: re-auth then update */
-  const resetPasswordWithOTP = async (email, newPassword) => {
-    // Find the user record to get their uid
-    const q = query(collection(db, 'users'), where('email', '==', email));
-    const snap = await getDocs(q);
-    if (snap.empty) throw new Error('Email not registered');
-    // We use Firebase Admin-style approach: sign them in with a temp session
-    // For client-side reset we use sendPasswordResetEmail alternative:
-    // Since we already verified OTP client-side, we allow them to re-login then change
-    return { email, found: true };
-  };
-
   const logout = async () => {
-    if (currentUser) await updateActiveStatus(currentUser.uid, false);
+    if (currentUser) await updatePresence(currentUser.uid, false);
     return signOut(auth);
   };
 
@@ -189,7 +228,7 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider value={{
       currentUser, userProfile, loading,
       signupStudent, signupAuthority, login, logout, refreshProfile,
-      resetPasswordWithOTP, checkClubRoleTaken,
+      checkClubRoleTaken,
     }}>
       {children}
     </AuthContext.Provider>
