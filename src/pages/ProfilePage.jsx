@@ -6,6 +6,7 @@ import { doc, getDoc, updateDoc, collection, query, where, onSnapshot, orderBy,
 import { db } from '../firebase/config';
 import { uploadImage } from '../utils/cloudinary';
 import { useAuth } from '../contexts/AuthContext';
+import { useAllUsers } from '../contexts/UsersContext';
 import { Camera, Edit2, Save, X, MessageCircle, MapPin, BookOpen, Briefcase,
   GraduationCap, Send, Trash2, ThumbsUp, Heart } from 'lucide-react';
 import UserAvatar from '../components/ui/UserAvatar';
@@ -23,7 +24,6 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const [profile,  setProfile]  = useState(null);
   const [posts,    setPosts]    = useState([]);
-  const [allUsers, setAllUsers] = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [editing,  setEditing]  = useState(false);
   const [saving,   setSaving]   = useState(false);
@@ -32,6 +32,7 @@ export default function ProfilePage() {
   const [comments,     setComments]     = useState({});
   const [commentText,  setCommentText]  = useState({});
 
+  const allUsers = useAllUsers();
   const isOwn = uid === userProfile?.uid;
 
   useEffect(()=>{
@@ -55,9 +56,7 @@ export default function ProfilePage() {
     return onSnapshot(q, s=>setPosts(s.docs.map(d=>({id:d.id,...d.data()}))));
   },[uid]);
 
-  useEffect(()=>{
-    return onSnapshot(collection(db,'users'), s=>setAllUsers(s.docs.map(d=>({id:d.id,...d.data()}))));
-  },[]);
+
 
   const handlePhotoUpload = async (e, type) => {
     const file=e.target.files[0]; if (!file) return;

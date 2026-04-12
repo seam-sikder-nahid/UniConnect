@@ -5,6 +5,7 @@ import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc,
 import { db } from '../firebase/config';
 import { uploadImage } from '../utils/cloudinary';
 import { useAuth } from '../contexts/AuthContext';
+import { useAllUsers } from '../contexts/UsersContext';
 import { sendNotification } from '../utils/notifications';
 import toast from 'react-hot-toast';
 import { Trash2, Image, X, BarChart2, Send, Edit2, Check, Users } from 'lucide-react';
@@ -74,16 +75,50 @@ function MentionInput({ value, onChange, onKeyDown, placeholder, className, allU
   );
 }
 
-// ── Reactions Picker ─────────────────────────────────────────
-function ReactionPicker({ onPick, currentReaction }) {
+// ── Reactions Picker (click-based, no hover) ─────────────────
+function ReactionPicker({ postId, onPick, currentReaction, open, onToggle }) {
+  const ref = useRef();
+
+  // Close when clicking outside
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onToggle(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open, onToggle]);
+
   return (
-    <div className="absolute bottom-full mb-1 left-0 flex items-center gap-1 bg-white rounded-full shadow-lg border border-surface-200 px-2 py-1.5 z-20">
-      {REACTIONS.map(r => (
-        <button key={r.key} onClick={()=>onPick(r.key)} title={r.label}
-          className={`w-8 h-8 rounded-full flex items-center justify-center text-lg hover:scale-125 transition-transform ${currentReaction===r.key?'ring-2 ring-primary-500 bg-primary-50':''}`}>
-          {r.emoji}
-        </button>
-      ))}
+    <div ref={ref} className="relative flex-1">
+      {/* Emoji panel — shown when open */}
+      {open && (
+        <div className="absolute bottom-full mb-2 left-0 flex items-center gap-1 bg-white rounded-full shadow-xl border border-surface-200 px-2.5 py-2 z-30">
+          {REACTIONS.map(r => (
+            <button
+              key={r.key}
+              onClick={() => { onPick(r.key); onToggle(false); }}
+              title={r.label}
+              className={`w-9 h-9 rounded-full flex items-center justify-center text-xl transition-transform hover:scale-125 active:scale-110
+                ${currentReaction === r.key ? 'ring-2 ring-primary-500 bg-primary-50 scale-110' : ''}`}>
+              {r.emoji}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* Trigger button */}
+      <button
+        onClick={() => onToggle(!open)}
+        className={`flex items-center gap-1 w-full justify-center px-2 py-1.5 rounded-lg text-xs font-medium transition-all
+          ${currentReaction
+            ? REACTIONS.find(r => r.key === currentReaction)?.color || 'text-gray-500'
+            : 'hover:bg-surface-100 text-gray-500'
+          }`}>
+        <span className="text-base leading-none">
+          {currentReaction ? REACTIONS.find(r => r.key === currentReaction)?.emoji : '👍'}
+        </span>
+        <span>{currentReaction ? REACTIONS.find(r => r.key === currentReaction)?.label : 'React'}</span>
+      </button>
     </div>
   );
 }
@@ -132,7 +167,7 @@ export default function FeedPage() {
   const navigate = useNavigate();
   const [posts,   setPosts]   = useState([]);
   const [loading, setLoading] = useState(true);
-  const [allUsers,setAllUsers] = useState([]);
+  const allUsers = useAllUsers();
   const [newPost, setNewPost]  = useState({ text:'', image:null, imagePreview:null, isPoll:false, pollOptions:['',''] });
   const [submitting, setSubmitting] = useState(false);
   const [expandedComments, setExpandedComments] = useState({});
@@ -149,10 +184,7 @@ export default function FeedPage() {
     return unsub;
   }, []);
 
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db,'users'), snap => setAllUsers(snap.docs.map(d=>({id:d.id,...d.data()}))));
-    return unsub;
-  }, []);
+
 
   const loadComments = (postId) => {
     if (comments[postId]) return;
@@ -215,21 +247,36 @@ export default function FeedPage() {
       await sendNotification(post.authorUid, userProfile.uid,'reaction',
         `${userProfile.fullName} reacted ${r.emoji} to your post`, post.id);
     }
-    setShowReactionsPicker(p=>({...p,[post.id]:false}));
   };
 
   const addComment = async (postId, authorUid) => {
     const text = commentText[postId]?.trim();
     if (!text) return;
-    // Detect mentions
-    const mentions = [];
-    const mentionRegex = /@([\w\s]+?)(?=\s|$|@)/g;
-    let m;
-    while ((m = mentionRegex.exec(text)) !== null) {
-      const name = m[1].trim();
-      const user = allUsers.find(u => u.fullName?.toLowerCase() === name.toLowerCase());
-      if (user && user.uid !== userProfile.uid) mentions.push(user.uid);
-    }
+
+    // Detect mentions: find every @word token, match against all known users
+    const mentionedUids = [];
+    const tokens = text.split(/\s+/);
+    tokens.forEach(token => {
+      if (!token.startsWith('@')) return;
+      const namePart = token.slice(1).toLowerCase();
+      if (!namePart) return;
+      // Try exact full-name match first (spaces replaced), then partial
+      const matched = allUsers.find(u => {
+        const full = u.fullName?.toLowerCase() || '';
+        return full === namePart || full.startsWith(namePart) || full.includes(namePart);
+      });
+      if (matched && matched.uid !== userProfile.uid && !mentionedUids.includes(matched.uid)) {
+        mentionedUids.push(matched.uid);
+      }
+    });
+    // Also handle "@First Last" spanning two tokens by scanning raw text
+    allUsers.forEach(u => {
+      if (!u.fullName || u.uid === userProfile.uid) return;
+      if (text.toLowerCase().includes('@' + u.fullName.toLowerCase())) {
+        if (!mentionedUids.includes(u.uid)) mentionedUids.push(u.uid);
+      }
+    });
+
     await addDoc(collection(db,'posts',postId,'comments'), {
       text, authorUid:userProfile.uid, authorName:userProfile.fullName,
       authorPhoto:userProfile.photoURL||'', createdAt:serverTimestamp()
@@ -238,9 +285,11 @@ export default function FeedPage() {
     await updateDoc(doc(db,'posts',postId), { commentCount:(post?.commentCount||0)+1 });
     if (authorUid !== userProfile.uid)
       await sendNotification(authorUid, userProfile.uid,'comment',`${userProfile.fullName} commented on your post`, postId);
-    mentions.forEach(uid =>
-      sendNotification(uid, userProfile.uid,'mention',`${userProfile.fullName} mentioned you in a comment`, postId)
-    );
+    // Send mention notifications
+    for (const uid of mentionedUids) {
+      await sendNotification(uid, userProfile.uid, 'mention',
+        `${userProfile.fullName} mentioned you in a comment`, postId);
+    }
     setCommentText(p=>({...p,[postId]:''}));
   };
 
@@ -368,8 +417,11 @@ export default function FeedPage() {
         const myR   = myReaction(post.reactions);
         const total = totalReactionCount(post.reactions);
         const isEditing = editingPostId === post.id;
+        // FIX #9 — always pull latest photoURL from allUsers, fall back to stored value
+        const liveAuthor = allUsers.find(u => u.uid === post.authorUid);
         const authorUser = {
-          uid:post.authorUid, fullName:post.authorName, photoURL:post.authorPhoto,
+          uid:post.authorUid, fullName:post.authorName,
+          photoURL: liveAuthor?.photoURL || post.authorPhoto || '',
           role:post.authorRole, position:post.authorPosition, department:post.authorDept,
           batch:post.authorBatch, clubPosition:post.authorClubPosition, clubAffiliation:post.authorClubAffiliation
         };
@@ -465,20 +517,14 @@ export default function FeedPage() {
 
             {/* Action bar */}
             <div className="flex gap-1">
-              {/* Reaction button with hover picker */}
-              <div className="relative flex-1">
-                {showReactionsPicker[post.id] && (
-                  <ReactionPicker onPick={k=>handleReaction(post,k)} currentReaction={myR?.key}/>
-                )}
-                <button
-                  onMouseEnter={()=>setShowReactionsPicker(p=>({...p,[post.id]:true}))}
-                  onMouseLeave={()=>setTimeout(()=>setShowReactionsPicker(p=>({...p,[post.id]:false})),300)}
-                  onClick={()=>handleReaction(post, myR?myR.key:'like')}
-                  className={`flex items-center gap-1 w-full justify-center px-2 py-1.5 rounded-lg text-xs font-medium transition-all ${myR?`${myR.color}`:'hover:bg-surface-100 text-gray-500'}`}>
-                  <span>{myR?myR.emoji:'👍'}</span>
-                  <span>{myR?myR.label:'React'}</span>
-                </button>
-              </div>
+              {/* Click-based reaction picker */}
+              <ReactionPicker
+                postId={post.id}
+                onPick={k => handleReaction(post, k)}
+                currentReaction={myR?.key}
+                open={!!showReactionsPicker[post.id]}
+                onToggle={val => setShowReactionsPicker(p => ({ ...p, [post.id]: val }))}
+              />
 
               <button onClick={()=>toggleComments(post.id)}
                 className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-surface-100 text-gray-500 transition-all flex-1 justify-center">
@@ -494,17 +540,21 @@ export default function FeedPage() {
             {/* Comments */}
             {expandedComments[post.id] && (
               <div className="mt-3 space-y-2">
-                {(comments[post.id]||[]).map(c => (
+                {(comments[post.id]||[]).map(c => {
+                  // FIX #9 — resolve latest photo for comment author
+                  const liveCommenter = allUsers.find(u => u.uid === c.authorUid);
+                  return (
                   <div key={c.id} className="flex gap-2">
                     <div className="cursor-pointer" onClick={()=>navigate(`/profile/${c.authorUid}`)}>
-                      <UserAvatar user={{fullName:c.authorName,photoURL:c.authorPhoto}} size="xs"/>
+                      <UserAvatar user={{fullName:c.authorName, photoURL: liveCommenter?.photoURL || c.authorPhoto || ''}} size="xs"/>
                     </div>
                     <div className="flex-1 bg-surface-50 rounded-xl px-3 py-2">
                       <p className="text-xs font-semibold">{c.authorName}</p>
                       <p className="text-xs text-gray-700 mt-0.5 whitespace-pre-wrap">{c.text}</p>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
                 <div className="flex gap-2 mt-2">
                   <UserAvatar user={userProfile} size="xs"/>
                   <div className="flex-1 flex gap-1.5">

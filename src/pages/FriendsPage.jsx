@@ -4,6 +4,8 @@ import { collection, onSnapshot, addDoc, query, where, updateDoc, doc,
   serverTimestamp, getDocs, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
+import { useAllUsers } from '../contexts/UsersContext';
+import { usePresence } from '../contexts/PresenceContext';
 import { Search, UserPlus, UserCheck, UserX, Users, Clock } from 'lucide-react';
 import UserAvatar from '../components/ui/UserAvatar';
 import UserBadges from '../components/ui/UserBadges';
@@ -14,17 +16,16 @@ import { sendNotification } from '../utils/notifications';
 export default function FriendsPage() {
   const { userProfile } = useAuth();
   const navigate = useNavigate();
+  const allUsersRaw = useAllUsers();
+  const presence = usePresence();
+  const allUsers = allUsersRaw.filter(u => u.uid !== userProfile?.uid);
   const [tab,      setTab]      = useState('discover'); // discover | requests | friends
-  const [allUsers, setAllUsers] = useState([]);
   const [requests, setRequests] = useState([]);  // incoming pending
   const [sent,     setSent]     = useState([]);  // outgoing pending
   const [friends,  setFriends]  = useState([]);  // accepted
   const [search,   setSearch]   = useState('');
 
-  // All users
-  useEffect(()=>{
-    return onSnapshot(collection(db,'users'), s=>setAllUsers(s.docs.map(d=>({id:d.id,...d.data()})).filter(u=>u.uid!==userProfile?.uid)));
-  },[userProfile]);
+
 
   // Friend requests TO me
   useEffect(()=>{
@@ -138,7 +139,7 @@ export default function FriendsPage() {
                 <button onClick={()=>navigate(`/profile/${u.uid}`)} className="flex-shrink-0">
                   <div className="relative">
                     <UserAvatar user={u} size="md"/>
-                    {u.isActive && <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></span>}
+                    {presence?.[u.uid]?.isActive && <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></span>}
                   </div>
                 </button>
                 <button onClick={()=>navigate(`/profile/${u.uid}`)} className="flex-1 min-w-0 text-left">
@@ -207,7 +208,7 @@ export default function FriendsPage() {
               <button onClick={()=>navigate(`/profile/${u.uid}`)} className="flex-shrink-0">
                 <div className="relative">
                   <UserAvatar user={u} size="md"/>
-                  {u.isActive && <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></span>}
+                  {presence?.[u.uid]?.isActive && <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></span>}
                 </div>
               </button>
               <button onClick={()=>navigate(`/profile/${u.uid}`)} className="flex-1 min-w-0 text-left">
@@ -216,7 +217,7 @@ export default function FriendsPage() {
                   <UserBadges user={u} inline/>
                 </div>
                 <p className="text-xs text-gray-500">{u.department}{u.batch?` · Batch ${u.batch}`:''}</p>
-                {u.isActive ? <p className="text-[10px] text-green-600 font-medium mt-0.5">● Active now</p> : null}
+                {presence?.[u.uid]?.isActive ? <p className="text-[10px] text-green-600 font-medium mt-0.5">● Active now</p> : null}
               </button>
               <button onClick={()=>navigate('/messages')}
                 className="flex-shrink-0 flex items-center gap-1 text-xs font-medium text-primary-600 bg-primary-50 rounded-xl px-2.5 py-1.5 border border-primary-200">

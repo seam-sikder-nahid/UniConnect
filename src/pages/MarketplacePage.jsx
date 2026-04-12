@@ -104,7 +104,7 @@ export default function MarketplacePage() {
   const filtered = filterCat==='All' ? listings : listings.filter(l=>l.category===filterCat);
 
   return (
-    <div className="space-y-4 pb-20 md:pb-4">
+    <div className="space-y-4 pb-20 md:pb-4 overflow-hidden">
       <div className="flex items-center justify-between">
         <h1 className="page-header mb-0">Marketplace</h1>
         <button onClick={()=>setShowForm(p=>!p)} className="btn-primary py-2 px-3 text-xs"><Plus size={15}/> Sell Item</button>
@@ -149,13 +149,15 @@ export default function MarketplacePage() {
       )}
 
       {/* Category filter */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
-        {CATS.map(cat=>(
-          <button key={cat} onClick={()=>setFilterCat(cat)}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${filterCat===cat?'bg-primary-600 text-white shadow-sm':'bg-white text-gray-500 hover:bg-primary-50 border border-surface-200'}`}>
-            {cat}
-          </button>
-        ))}
+      <div className="overflow-x-auto -mx-1 px-1 pb-1">
+        <div className="flex gap-1.5" style={{width:'max-content', minWidth:'100%'}}>
+          {CATS.map(cat=>(
+            <button key={cat} onClick={()=>setFilterCat(cat)}
+              className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${filterCat===cat?'bg-primary-600 text-white shadow-sm':'bg-white text-gray-500 hover:bg-primary-50 border border-surface-200'}`}>
+              {cat}
+            </button>
+          ))}
+        </div>
       </div>
 
       {filtered.length===0 ? (
@@ -166,9 +168,9 @@ export default function MarketplacePage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {filtered.map(listing=>(
-            <div key={listing.id} className="card flex flex-col hover:shadow-md transition-all">
+            <div key={listing.id} className="card flex flex-col hover:shadow-md transition-all w-full min-w-0">
               {listing.imageURL && <img src={listing.imageURL} alt={listing.title} className="w-full h-40 object-cover rounded-xl mb-3"/>}
-              <div className="flex items-start gap-2">
+              <div className="flex items-start gap-2 min-w-0">
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-sm text-surface-900 truncate">{listing.title}</h3>
                   <div className="flex items-center gap-1.5 mt-1 flex-wrap">

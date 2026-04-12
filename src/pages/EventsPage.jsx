@@ -5,6 +5,7 @@ import { collection, addDoc, onSnapshot, orderBy, query, serverTimestamp,
 import { db } from '../firebase/config';
 import { uploadImage } from '../utils/cloudinary';
 import { useAuth } from '../contexts/AuthContext';
+import { useAllUsers } from '../contexts/UsersContext';
 import { Calendar, Plus, X, Clock, MapPin, Users, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, isFuture, isToday } from 'date-fns';
@@ -12,8 +13,8 @@ import { notifyDepartment } from '../utils/notifications';
 
 export default function EventsPage() {
   const { userProfile } = useAuth();
+  const allUsers = useAllUsers();
   const [events,     setEvents]     = useState([]);
-  const [allUsers,   setAllUsers]   = useState([]);
   const [showForm,   setShowForm]   = useState(false);
   const [tab,        setTab]        = useState('upcoming');
   const [form,       setForm]       = useState({title:'',description:'',date:'',time:'',location:''});
@@ -26,9 +27,7 @@ export default function EventsPage() {
     const q = query(collection(db,'events'), orderBy('date','asc'));
     return onSnapshot(q, snap=>setEvents(snap.docs.map(d=>({id:d.id,...d.data()}))));
   }, []);
-  useEffect(() => {
-    return onSnapshot(collection(db,'users'), snap=>setAllUsers(snap.docs.map(d=>({id:d.id,...d.data()}))));
-  }, []);
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
